@@ -6,7 +6,6 @@ class Postgres extends ICrud {
         super()
         this._driver = null
         this._clientes = null
-        this._connect()
     }
 
     async isConnected(){
@@ -44,7 +43,7 @@ class Postgres extends ICrud {
         await this._clientes.sync()
     }
 
-    _connect(){
+    async connect(){
         this._driver = new Sequelize(
             'clientes', //database
             'henrique', 
@@ -57,11 +56,19 @@ class Postgres extends ICrud {
                 operatorsAliases: 0
             }
         )
+        await this.defineModel()
         
     }
 
-    create(item){
-        console.log('O item foi salvo em postgres')
+    async create(item){
+
+        /* Por padrão quando é criado um objeto no Postgres,
+        retorna varias informações, sobre o que foi inserido, manipulado,
+        alterado, em qual tabela, coluna, schema, etc
+        Para nosso caso, só desejamos que nos retorne os dados inseridos */
+        const {dataValues} =  await this._clientes.create(item)
+
+        return dataValues
     }
 
 }

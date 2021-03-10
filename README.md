@@ -136,6 +136,7 @@ Afim de se simplificar os métodos de manipulação do banco de dados, utilizamo
 
 - Dentro da estratégia do Postgres, importamos o Sequelize e criamos o método connect, onde será configurado o driver do database
 
+
 ```javascript
     const ICrud = require('./interfaces/interfaceCrud')
     const Sequelize = require('sequelize')
@@ -147,7 +148,7 @@ Afim de se simplificar os métodos de manipulação do banco de dados, utilizamo
             this._clientes = null
         }
 
-        _connect(){
+        async connect(){
             this._driver = new Sequelize(
                 'clientes', //database
                 'henrique', 
@@ -160,22 +161,9 @@ Afim de se simplificar os métodos de manipulação do banco de dados, utilizamo
                     operatorsAliases: 0
                 }
             )
-            
+            await this.defineModel()
         }
     }
-```
-**Verificando se esta conectado**
-
-```javascript
-    async isConnected(){
-            try {
-                await this._driver.authenticate()
-                return true
-            } catch (error) {
-                console.log('fail', error)
-                return false;
-            }
-        }
 ```
 **Definindo Modelo**
 
@@ -207,6 +195,21 @@ Afim de se simplificar os métodos de manipulação do banco de dados, utilizamo
     }
 ```
 
+**Verificando se esta conectado**
+
+```javascript
+    async isConnected(){
+        try {
+            await this._driver.authenticate()
+            return true
+        } catch (error) {
+            console.log('fail', error)
+            return false;
+        }
+    }
+```
+
+
 ## TDD (Test Driven Development) ##
 
 Aplicando a prática do desenvolvimento orientado por testes, vamos criar um teste para nossa estratégia com o Postgres
@@ -226,6 +229,10 @@ Como o método isConnected, retorna true ou false, criamos nosso teste baseado n
 
     const context = new Context(new Postgres())
 
+    const MOCK_CLIENTE_CADASTRAR = {
+        nome: "João",
+        profissao: "Pintor"
+    }
     describe('Postgres Strategy', function() {
         /* 
             Como estamos trabalhando com banco de dados,
@@ -233,12 +240,26 @@ Como o método isConnected, retorna true ou false, criamos nosso teste baseado n
             definimos o timeout
         
         */
-        this.timeout(Infinity) 
+        this.timeout(Infinity)
+
+        this.beforeAll(async function(){
+            await context.connect()
+        })
 
         it('PostgresSQL Connection',  async function () {
             const result = await context.isConnected()
 
             assert.deepStrictEqual(result, true)
+        })
+
+        it('cadastrar', async function (){
+            const result = await context.create(MOCK_CLIENTE_CADASTRAR)
+            
+            /* Como o resultado retorna o id junto, e para nosso teste 
+            é irrelevante, nós deletamos essa chave*/
+            delete result.id
+            console.log('result',result)
+            assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
         })
     })
 ```
