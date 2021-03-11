@@ -32,7 +32,13 @@ describe('Postgres Strategy', function() {
         /* Como o resultado retorna o id junto, e para nosso teste 
         é irrelevante, nós deletamos essa chave*/
         delete result.id
-        console.log('result',result)
+        /* console.log('result',result) */
+        assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
+    })
+    it('listar', async function (){
+        const [result] = await context.read({nome: MOCK_CLIENTE_CADASTRAR.nome})
+
+        delete result.id
         assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
     })
 })

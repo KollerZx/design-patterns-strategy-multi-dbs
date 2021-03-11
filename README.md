@@ -208,7 +208,21 @@ Afim de se simplificar os métodos de manipulação do banco de dados, utilizamo
         }
     }
 ```
+**Método create**
 
+Por padrão quando é criado um objeto no Postgres,
+retorna varias informações, sobre o que foi inserido, manipulado,
+alterado, em qual tabela, coluna, schema, etc
+Para nosso caso, só desejamos que nos retorne os dados inseridos
+
+```javascript
+    async create(item){
+
+        const {dataValues} =  await this._clientes.create(item)
+
+        return dataValues
+    }
+```
 
 ## TDD (Test Driven Development) ##
 
@@ -217,6 +231,11 @@ Aplicando a prática do desenvolvimento orientado por testes, vamos criar um tes
 Para isso instalaremos o mocha como dependência de desenvolvimento: 
 
 `npm install --save-dev mocha`
+
+Dentro do package.json alteramos o script test para:
+```json
+    "test": "mocha src/__tests__/*.js"
+```
 
 - Criando nossos primeiros testes
 
@@ -263,6 +282,32 @@ Como o método isConnected, retorna true ou false, criamos nosso teste baseado n
         })
     })
 ```
-- Rodando o teste:
 
-`mocha *.test.js`
+rodando o teste:
+    
+`npm test`
+
+
+**Método Read**
+
+O método findAll do sequelize retorna um array com uma lista de resultados e todos atributos e informações, desejamos apenas que retorne os dados referente a nosso objeto consultado, pra isso passamos o atributo 'raw:true'
+
+```javascript
+    async read(item = {}){
+        return this._clientes.findAll({where : item, raw:true})
+    }
+```
+
+- Seguindo nosso fluxo TDD, ja implementamos o teste para nosso método criado
+
+Como ja mencionado, o método findAll nos retorna um array, desejamos apenas a primeira posição desse array utilizando [result], e também desprezamos a chave id para nosso teste
+
+```javascript
+    it('listar', async function (){
+        const [result] = await context.read({nome: MOCK_CLIENTE_CADASTRAR.nome})
+
+        delete result.id
+        assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
+    })
+```
+
