@@ -7,6 +7,11 @@ const MOCK_CLIENTE_CADASTRAR = {
     nome: "João",
     profissao: "Pintor"
 }
+
+const MOCK_CLIENTE_ATUALIZAR = {
+    nome: "Pedro",
+    profissao: "Professor"
+}
 describe('Postgres Strategy', function() {
     /* 
         Como estamos trabalhando com banco de dados,
@@ -18,6 +23,7 @@ describe('Postgres Strategy', function() {
 
     this.beforeAll(async function(){
         await context.connect()
+        await context.create(MOCK_CLIENTE_ATUALIZAR)
     })
 
     it('PostgresSQL Connection',  async function () {
@@ -40,5 +46,17 @@ describe('Postgres Strategy', function() {
 
         delete result.id
         assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
+    })
+    it('atualizar', async function (){
+        const [itemAtualizar] = await context.read({ nome: MOCK_CLIENTE_ATUALIZAR.nome})
+
+        
+        const novoItem = {
+            ...MOCK_CLIENTE_ATUALIZAR, 
+            nome:'Luiz'
+        }
+        const [result] = await context.update(itemAtualizar.id, novoItem)
+
+        assert.deepStrictEqual(result, 1)
     })
 })

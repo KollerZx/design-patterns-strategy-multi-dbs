@@ -311,3 +311,49 @@ Como ja mencionado, o método findAll nos retorna um array, desejamos apenas a p
     })
 ```
 
+**Método Update**
+
+O método update, deve receber o id do objeto a ser atualizado, e o valor a ser atualizado
+
+```javascript
+    async update(id, item){
+        return this._clientes.update(item, { where: { id:id }})
+    }
+```
+
+Para que nosso teste do update funcione, vamos inserir o objeto MOCK_CLIENTE_ATUALIZAR que devemos defini-lo antes dos testes:
+
+```javascript
+    const MOCK_CLIENTE_ATUALIZAR = {
+        nome: "Pedro",
+        profissao: "Professor"
+    }
+```
+
+
+```javascript
+    this.beforeAll(async function(){
+        await context.connect()
+        await context.create(MOCK_CLIENTE_ATUALIZAR)
+    })
+
+```
+O retorno da função update é um array com um ou dois elementos. O primeiro elemento é sempre o número de linhas afetadas, enquanto o segundo elemento são as linhas afetadas reais (suportado apenas em postgres com options.returning: true)
+
+fonte: `https://sequelize.org/master/class/lib/model.js~Model.html#static-method-update`
+
+```javascript
+    it('atualizar', async function (){
+        const [itemAtualizar] = await context.read({ nome: MOCK_CLIENTE_ATUALIZAR.nome})
+
+        
+        const novoItem = {
+            ...MOCK_CLIENTE_ATUALIZAR, 
+            nome:'Luiz'
+        }
+        const [result] = await context.update(itemAtualizar.id, novoItem)
+
+        assert.deepStrictEqual(result, 1)
+    })
+```
+
