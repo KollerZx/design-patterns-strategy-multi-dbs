@@ -357,3 +357,26 @@ fonte: `https://sequelize.org/master/class/lib/model.js~Model.html#static-method
     })
 ```
 
+**Método delete**
+
+```javascript
+
+    async delete(id){
+        return this._clientes.destroy({where: { id }})
+    }
+```
+
+Assim como o método update, o delete retorna o numero de linhas afetadas, com base nisso criamos nosso teste.
+
+
+
+```javascript
+    it('remover por id', async function (){
+        const [item] = await context.read({})
+
+        const result = await context.delete(item.id)
+
+        assert.deepStrictEqual(result, 1)
+    })
+```
+
