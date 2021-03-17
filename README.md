@@ -107,6 +107,8 @@ Caso os métodos não sejam implementados em suas estratégias, irá chamar o m�
 
 ```
 
+## Estratégia com Postgres ##
+
 **Implementa a estratégia do Postgres**
 
 ```javascript
@@ -369,7 +371,6 @@ fonte: `https://sequelize.org/master/class/lib/model.js~Model.html#static-method
 Assim como o método update, o delete retorna o numero de linhas afetadas, com base nisso criamos nosso teste.
 
 
-
 ```javascript
     it('remover por id', async function (){
         const [item] = await context.read({})
@@ -379,4 +380,144 @@ Assim como o método update, o delete retorna o numero de linhas afetadas, com b
         assert.deepStrictEqual(result, 1)
     })
 ```
+
+## Estratégia com MongoDB ##
+
+**Instalando o Mongoose**
+
+`npm install mongoose`
+
+**Criando a conexão com o Database**
+
+Dentro da estratégia do MongoDb, definimos o modelo dos dados do banco e implementamos o método de conexão
+
+```javascript
+
+const ICrud = require('./interfaces/interfaceCrud')
+const Mongoose = require('mongoose');
+class MongoDB extends ICrud {
+    constructor() {
+        super()
+    }
+    defineModel() {
+        /* Cria o modelo de validação de como a coleção será  */
+        const clienteSchema = new Mongoose.Schema({
+            nome: {
+                type: String,
+                required: true
+            },
+            profissao: {
+                type: String,
+                required: true
+            },
+            insertedAt: {
+                type: Date,
+                default: new Date()
+            }
+        })
+        /* Registra o modelo na tabela clientes com o Schema definido*/
+
+        this._clientes = Mongoose.model('clientes', clienteSchema)
+    }
+     connect() {
+        Mongoose.connect('mongodb://henrique:minhasenha@localhost:27017/clientes', { useNewUrlParser: true, useUnifiedTopology: true }, function (error) {
+            if (!error) return;
+
+            console.log('Failed to connect!', error);
+        });
+
+        const connection = Mongoose.connection
+        this._driver = connection
+        connection.once('open', () => console.log('Database is running!'))
+
+        /* Após realizar a conexão ja define o modelo */
+        this.defineModel()
+        
+    }
+}
+```
+
+Criamos o método isConnected para verificar o status da conexão, antes da definição da classe criamos um objeto STATUS para armazenar os status padrão do Mongoose
+
+```javascript
+    const STATUS = {
+    0: 'Disconnected',
+    1: 'Connected',
+    2: 'Connecting',
+    3: 'Disconnecting'
+}
+```
+
+```javascript
+    async isConnected() {
+    
+        const state = STATUS[this._driver.readyState]
+
+        if(state === 'Connected') return state;
+
+        if(state !== 'Connecting') return state;
+
+        await new Promise(resolve => setTimeout(resolve,1000))
+
+        return STATUS[this._driver.readyState]
+    }
+```
+
+Dessa forma, se o status for conectando, lançamos uma promise e aguardamos 1 segundo para que o status seja retornado novamente. Vamos validar isso em nossos testes.
+
+```javascript
+const assert = require('assert')
+const MongoDB = require('./../db/strategies/mongodb')
+const Context = require('./../db/strategies/base/contextStrategy')
+
+const context = new Context(new MongoDB())
+
+describe('MongoDB suite de testes', function (){
+
+    this.beforeAll(async () => {
+        await context.connect()
+    })
+    it('Verificar conexão', async function (){
+        const result = await context.isConnected()
+
+        console.log('result', result)
+
+        const expected = 'Connected'
+
+        assert.deepStrictEqual(result, expected)
+    })
+})
+
+```
+
+**Método Create**
+
+```javascript
+
+    create(item) {
+        return this._clientes.create(item)
+    }
+
+```
+
+Criamos o objeto MOCK_CLIENTE_CADASTRAR para testar nosso método create.
+
+```javascript
+    const MOCK_CLIENTE_CADASTRAR = {
+        nome:'Jose',
+        profissao: 'Mecânico'
+    }
+```
+Para validar nosso teste, extraimos do objeto retornado apenas os valores 'nome' e 'profissão', e comparamos com o objeto MOCK_CLIENTE_CADASTRAR
+
+```javascript
+
+    it('cadastrar', async function (){
+        const { nome, profissao } = await context.create(MOCK_CLIENTE_CADASTRAR)
+
+        assert.deepStrictEqual({nome, profissao}, MOCK_CLIENTE_CADASTRAR)
+    })
+```
+
+
 
