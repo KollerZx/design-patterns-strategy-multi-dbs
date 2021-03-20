@@ -16,7 +16,7 @@
     5- Roda em segundo plano ' -d '
     6- Nome da imagem a ser baixada
 
-`sudo docker run --name postgres -e POSTGRESS_USER=henrique -e POSTGRESS_PASSWORD=minhasenha -e POSTGRES_DB=clientes -p 5432:5432 -d postgres`
+`sudo docker run --name postgres -e POSTGRESS_USER=usuario -e POSTGRESS_PASSWORD=minhasenha -e POSTGRES_DB=clientes -p 5432:5432 -d postgres`
 
 
 Verifica se o container esta rodando 
@@ -33,7 +33,7 @@ Verifica se o container esta rodando
 
 - Cria um usuario com permissão de leitura e escrita no db clientes
 
-`sudo docker exec -it mongodb mongo --host localhost -u admin -p senhaadmin --authenticationDatabase admin --eval "db.getSiblingDB('clientes').createUser({ user: 'henrique', pwd:'minhasenha', roles: [{role: 'readWrite', db: 'clientes'}]})"`
+`sudo docker exec -it mongodb mongo --host localhost -u admin -p senhaadmin --authenticationDatabase admin --eval "db.getSiblingDB('clientes').createUser({ user: 'usuario', pwd:'senha', roles: [{role: 'readWrite', db: 'clientes'}]})"`
 
 **Instalando imagem do Adminer**
 
@@ -109,13 +109,16 @@ Caso os métodos não sejam implementados em suas estratégias, irá chamar o m�
 
 ## Estratégia com Postgres ##
 
-**Implementa a estratégia do Postgres**
+Para que se possa trabalhar com multiplas instancias de banco de dados e varios schemas, passa-se como parametros para o construtor a conexão e o schema
+
 
 ```javascript
     class Postgres extends ICrud {
-    constructor(){
-        super()
-    }
+        constructor(connection, schema){
+            super()
+            this._connection = connection
+            this._schema = schema
+        }
 }
 ```
 
@@ -136,43 +139,48 @@ Afim de se simplificar os métodos de manipulação do banco de dados, utilizamo
 
 **Configurando driver**
 
-- Dentro da estratégia do Postgres, importamos o Sequelize e criamos o método connect, onde será configurado o driver do database
+- Dentro da estratégia do Postgres, importamos o Sequelize e criamos o método connect, onde será configurado a conexão com o banco de dados
 
 
 ```javascript
-    const ICrud = require('./interfaces/interfaceCrud')
+    const ICrud = require('./../interfaces/interfaceCrud')
     const Sequelize = require('sequelize')
 
     class Postgres extends ICrud {
-        constructor(){
+        constructor(connection, schema){
             super()
-            this._driver = null
-            this._clientes = null
+            this._connection = connection
+            this._schema = schema
         }
 
-        async connect(){
-            this._driver = new Sequelize(
+        static async connect(){
+            const connection = new Sequelize(
                 'clientes', //database
-                'henrique', 
-                'minhasenha',
+                'usuario', 
+                'senha',
             
                 {
                     host: 'localhost',
                     dialect:'postgres', //tipo do driver
                     quoteIdentifiers: false,
-                    operatorsAliases: 0
+                    operatorsAliases: 0,
+                    loggin:false
                 }
             )
-            await this.defineModel()
+            return connection
         }
     }
 ```
-**Definindo Modelo**
 
-- Criamos o método defineModel() 
+**Definindo um Schema**
+
+Aplicando essa estratégia, pode se criar diversos schemas, os quais só precisarão ser exportados como módulo, onde serão passados como parâmetro para o contexto implementado. No exemplo abaixo criamos um schema para cadastro de clientes
 ```javascript
-    async defineModel(){
-        this._clientes = this._driver.define('clientes', {
+    const Sequelize = require('sequelize')
+
+    const ClienteSChema = {
+        name: 'clientes',
+        schema:{
             id: {
                 type: Sequelize.INTEGER,
                 required: true,
@@ -187,22 +195,38 @@ Afim de se simplificar os métodos de manipulação do banco de dados, utilizamo
                 type: Sequelize.STRING,
                 required: true
             } 
-            
-        }, {
+        },
+        options:{
             tableName: 'CLIENTES',
             freezeTable: false,
             timestamps:false
-        })
-        await Clientes.sync()
+        }
+    }
+
+
+module.exports = ClienteSChema
+
+```
+**Definindo Modelo**
+
+- Criamos o método para definir o modelo, onde receberá como parâmetro a conexão e o schema referente ja definido em um módulo, o qual deverá ser importado quando se for instanciar a classe
+```javascript
+    static async defineModel(connection, schema){
+        const model = connection.define(
+            schema.name, schema.schema, schema.options
+        )
+        await model.sync()
+
+        return model
     }
 ```
 
-**Verificando se esta conectado**
+**Método de verificação da Conexão**
 
 ```javascript
     async isConnected(){
         try {
-            await this._driver.authenticate()
+            await this._connection.authenticate()
             return true
         } catch (error) {
             console.log('fail', error)
@@ -220,7 +244,7 @@ Para nosso caso, só desejamos que nos retorne os dados inseridos
 ```javascript
     async create(item){
 
-        const {dataValues} =  await this._clientes.create(item)
+        const {dataValues} =  await this._schema.create(item)
 
         return dataValues
     }
@@ -245,15 +269,17 @@ Como o método isConnected, retorna true ou false, criamos nosso teste baseado n
 
 ```javascript
     const assert = require('assert')
-    const Postgres = require('./../db/strategies/postgres')
+    const Postgres = require('./../db/strategies/postgres/postgres')
     const Context = require('./../db/strategies/base/contextStrategy')
-
-    const context = new Context(new Postgres())
+    const ClienteSchema = require('./../db/strategies/postgres/schemas/clienteSchema')
 
     const MOCK_CLIENTE_CADASTRAR = {
         nome: "João",
         profissao: "Pintor"
     }
+
+    //Define a variavel context que será utilizada no momento da instância do banco a ser testado
+    let context = {}
     describe('Postgres Strategy', function() {
         /* 
             Como estamos trabalhando com banco de dados,
@@ -264,7 +290,15 @@ Como o método isConnected, retorna true ou false, criamos nosso teste baseado n
         this.timeout(Infinity)
 
         this.beforeAll(async function(){
-            await context.connect()
+
+            //Recebe a conexão do banco a ser testado
+            const connection = await Postgres.connect()
+
+            //Recebe o modelo com base na conexão e schema passado
+            const model = await Postgres.defineModel(connection, ClienteSchema)
+
+            //instancia o contexto do banco de dados e schema a ser testado
+            context = new Context(new Postgres(connection, model))
         })
 
         it('PostgresSQL Connection',  async function () {
@@ -296,7 +330,7 @@ O método findAll do sequelize retorna um array com uma lista de resultados e to
 
 ```javascript
     async read(item = {}){
-        return this._clientes.findAll({where : item, raw:true})
+        return this._schema.findAll({where : item, raw:true})
     }
 ```
 
@@ -319,7 +353,7 @@ O método update, deve receber o id do objeto a ser atualizado, e o valor a ser 
 
 ```javascript
     async update(id, item){
-        return this._clientes.update(item, { where: { id:id }})
+        return this._schema.update(item, { where: { id:id }})
     }
 ```
 
@@ -364,7 +398,7 @@ fonte: `https://sequelize.org/master/class/lib/model.js~Model.html#static-method
 ```javascript
 
     async delete(id){
-        return this._clientes.destroy({where: { id }})
+        return this._schema.destroy({where: { id }})
     }
 ```
 
@@ -396,45 +430,51 @@ Dentro da estratégia do MongoDb, definimos o modelo dos dados do banco e implem
 const ICrud = require('./interfaces/interfaceCrud')
 const Mongoose = require('mongoose');
 class MongoDB extends ICrud {
-    constructor() {
+     /* Para que se possa trabalhar com multi banco de dados e multi schemas, 
+    passamos como parametros no construtor */
+    constructor(connection, schema) {
         super()
+        this._schema = schema;
+        this._connection = connection;
     }
-    defineModel() {
-        /* Cria o modelo de validação de como a coleção será  */
-        const clienteSchema = new Mongoose.Schema({
-            nome: {
-                type: String,
-                required: true
-            },
-            profissao: {
-                type: String,
-                required: true
-            },
-            insertedAt: {
-                type: Date,
-                default: new Date()
-            }
-        })
-        /* Registra o modelo na tabela clientes com o Schema definido*/
-
-        this._clientes = Mongoose.model('clientes', clienteSchema)
-    }
-     connect() {
-        Mongoose.connect('mongodb://henrique:minhasenha@localhost:27017/clientes', { useNewUrlParser: true, useUnifiedTopology: true }, function (error) {
+     static connect() {
+        Mongoose.connect('mongodb://usuario:senha@localhost:27017/clientes', { useNewUrlParser: true, useUnifiedTopology: true }, function (error) {
             if (!error) return;
 
             console.log('Failed to connect!', error);
         });
 
         const connection = Mongoose.connection
-        this._driver = connection
+       
         connection.once('open', () => console.log('Database is running!'))
 
-        /* Após realizar a conexão ja define o modelo */
-        this.defineModel()
+       return connection
         
     }
 }
+```
+**Criando ums schema para estratégia com MongoDB**
+
+Criamos o schema e ja exportamos como modelo, o qual precisará ser passado como parâmetro para instanciar o contexto do MongoDB
+```javascript
+    const Mongoose = require('mongoose');
+    const clienteSchema = new Mongoose.Schema({
+        nome: {
+            type: String,
+            required: true
+        },
+        profissao: {
+            type: String,
+            required: true
+        },
+        insertedAt: {
+            type: Date,
+            default: new Date()
+        }
+    })
+    /* Registra o modelo na tabela clientes com o Schema definido*/
+
+    module.exports = Mongoose.model('clientes', clienteSchema)
 ```
 
 Criamos o método isConnected para verificar o status da conexão, antes da definição da classe criamos um objeto STATUS para armazenar os status padrão do Mongoose
@@ -451,7 +491,7 @@ Criamos o método isConnected para verificar o status da conexão, antes da defi
 ```javascript
     async isConnected() {
     
-        const state = STATUS[this._driver.readyState]
+        const state = STATUS[this._connection.readyState]
 
         if(state === 'Connected') return state;
 
@@ -459,7 +499,7 @@ Criamos o método isConnected para verificar o status da conexão, antes da defi
 
         await new Promise(resolve => setTimeout(resolve,1000))
 
-        return STATUS[this._driver.readyState]
+        return STATUS[this._connection.readyState]
     }
 ```
 
@@ -467,15 +507,18 @@ Dessa forma, se o status for conectando, lançamos uma promise e aguardamos 1 se
 
 ```javascript
 const assert = require('assert')
-const MongoDB = require('./../db/strategies/mongodb')
+const MongoDB = require('./../db/strategies/mongodb/mongodb')
 const Context = require('./../db/strategies/base/contextStrategy')
+const ClienteSchema = require('./../db/strategies/mongodb/schemas/clientesSchema')
 
-const context = new Context(new MongoDB())
+let context = {}
 
 describe('MongoDB suite de testes', function (){
 
     this.beforeAll(async () => {
-        await context.connect()
+        const connection = MongoDB.connect()
+
+        context = new Context(new MongoDB(connection, ClienteSchema))
     })
     it('Verificar conexão', async function (){
         const result = await context.isConnected()
@@ -495,7 +538,7 @@ describe('MongoDB suite de testes', function (){
 ```javascript
 
     create(item) {
-        return this._clientes.create(item)
+        return this._schema.create(item)
     }
 
 ```
@@ -519,5 +562,84 @@ Para validar nosso teste, extraimos do objeto retornado apenas os valores 'nome'
     })
 ```
 
+**Metodo read**
 
+Criamos o metodo read, que recebe como parametros da query, o item a ser pesquisado, skip e limit, de modo a se aplicar a boa prática de paginação dos resultados, sendo assim, ao chamar o método pode-se definir a partir de qual posição (skip) se deseja iniciar, e a quantidade de resultados a se retornar (limit)
 
+```javascript
+    read(item, skip=0, limit=10){
+        return this._schema.find(item).skip(skip).limit(limit)
+    }
+```
+```javascript
+     it('listar', async function (){
+        /* Pega somente os atributos nome e poder do objeto retornado na primeira posição da lista */
+        
+        const [{nome, profissao}] = await context.read({nome: MOCK_CLIENTE_CADASTRAR.nome})
+
+        const result = {
+            nome, profissao
+        }
+
+        assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
+    })
+```
+
+**Método Update**
+
+No mongoDB caso não seja especificado o que se deseja realizar, pode-se ocorrer a perda de dados. Dessa forma deve-se informar a opção $set:{chave:valor}, passando a chave e valor a serem alterados. Sem essa opção, o objeto irá sobrescrever todo o objeto do id correspondente, perdendo assim as propriedades que possuia.
+```javascript
+    update(id, item){
+        return this._schema.updateOne({_id: id }, { $set: item } )
+    }
+```
+
+Para testar nosso método, definimos dois objetos que serão manipulados no teste, os quais precisam ser chamados no beforeAll da suite de testes
+
+```javascript
+    const MOCK_CLIENTE_ATUALIZAR = {
+    nome:'Alfredo',
+    profissao: 'Motorista'
+    }
+    let MOCK_CLIENTE_ID = ''
+```    
+
+```javascript
+    this.beforeAll(async () => {
+        const connection = MongoDB.connect()
+
+        context = new Context(new MongoDB(connection, ClienteSchema))
+
+        //cria-se o objeto para se poder utilizar no teste do metodo
+        const result = await context.create(MOCK_CLIENTE_ATUALIZAR)
+        
+        //armazena o id do objeto criado
+        MOCK_CLIENTE_ID = result._id 
+    })
+```
+Realiza o teste passando o id do nosso objeto criado, e especificando a chave e valor a serem atualizados. Por padrão é retornado o numero de linhas afetadas, sendo assim esperamos que seja apenas 1.
+```javascript
+    it('atualizar', async function (){
+        const result = await context.update(MOCK_CLIENTE_ID, {nome: 'Vicente'})
+
+        assert.deepStrictEqual(result.nModified, 1)
+    })
+```
+
+**Metodo delete**
+
+Por padrão o mongo nao permite que se passe o remove sem where, irá retornar uma exceçao informando
+Caso realmente se deseje remover todos os dados da base, deve se explicitar passando as chaves vazias {} 
+```javascript
+    delete(id){
+        return this._schema.deleteOne({_id: id})
+    }
+```
+Por padrão é retornado o numero de linhas afetadas, sendo assim esperamos que seja apenas 1.
+```javascript
+    it('remover', async function (){
+        const result = await context.delete(MOCK_CLIENTE_ID)
+
+        assert.deepStrictEqual(result.n, 1)
+    })
+```

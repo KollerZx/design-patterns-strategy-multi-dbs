@@ -1,8 +1,9 @@
 const assert = require('assert')
-const Postgres = require('./../db/strategies/postgres')
+const Postgres = require('./../db/strategies/postgres/postgres')
 const Context = require('./../db/strategies/base/contextStrategy')
+const ClienteSchema = require('./../db/strategies/postgres/schemas/clienteSchema')
 
-const context = new Context(new Postgres())
+
 const MOCK_CLIENTE_CADASTRAR = {
     nome: "João",
     profissao: "Pintor"
@@ -12,7 +13,9 @@ const MOCK_CLIENTE_ATUALIZAR = {
     nome: "Pedro",
     profissao: "Professor"
 }
-describe('Postgres Strategy', function() {
+
+let context = {}
+describe.only('Postgres Strategy', function() {
     /* 
         Como estamos trabalhando com banco de dados,
         pode ser que a conexão demore um pouco, para isso
@@ -22,7 +25,10 @@ describe('Postgres Strategy', function() {
     this.timeout(Infinity)
 
     this.beforeAll(async function(){
-        await context.connect()
+        const connection = await Postgres.connect()
+        const model = await Postgres.defineModel(connection, ClienteSchema)
+        context = new Context(new Postgres(connection, model))
+        
         await context.create(MOCK_CLIENTE_ATUALIZAR)
     })
 

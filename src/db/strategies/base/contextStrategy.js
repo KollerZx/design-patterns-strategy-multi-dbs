@@ -14,8 +14,8 @@ class ContextStrategy extends ICrud{
         return this._database.create(item)
     }
 
-    read(query){
-        return this._database.read(query)
+    read(item, skip, limit){
+        return this._database.read(item, skip, limit)
     }
     update(id, item){
         return this._database.update(id, item)
@@ -24,7 +24,7 @@ class ContextStrategy extends ICrud{
     delete(id){
         return this._database.delete(id)
     }
-    connect(){
+    static connect(){
         return this._database.connect()
     }
     isConnected(){
