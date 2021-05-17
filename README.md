@@ -250,80 +250,6 @@ Para nosso caso, só desejamos que nos retorne os dados inseridos
     }
 ```
 
-## TDD (Test Driven Development) ##
-
-Aplicando a prática do desenvolvimento orientado por testes, vamos criar um teste para nossa estratégia com o Postgres
-
-Para isso instalaremos o mocha como dependência de desenvolvimento: 
-
-`npm install --save-dev mocha`
-
-Dentro do package.json alteramos o script test para:
-```json
-    "test": "mocha src/__tests__/*.js"
-```
-
-- Criando nossos primeiros testes
-
-Como o método isConnected, retorna true ou false, criamos nosso teste baseado nesse resultado
-
-```javascript
-    const assert = require('assert')
-    const Postgres = require('./../db/strategies/postgres/postgres')
-    const Context = require('./../db/strategies/base/contextStrategy')
-    const ClienteSchema = require('./../db/strategies/postgres/schemas/clienteSchema')
-
-    const MOCK_CLIENTE_CADASTRAR = {
-        nome: "João",
-        profissao: "Pintor"
-    }
-
-    //Define a variavel context que será utilizada no momento da instância do banco a ser testado
-    let context = {}
-    describe('Postgres Strategy', function() {
-        /* 
-            Como estamos trabalhando com banco de dados,
-            pode ser que a conexão demore um pouco, para isso
-            definimos o timeout
-        
-        */
-        this.timeout(Infinity)
-
-        this.beforeAll(async function(){
-
-            //Recebe a conexão do banco a ser testado
-            const connection = await Postgres.connect()
-
-            //Recebe o modelo com base na conexão e schema passado
-            const model = await Postgres.defineModel(connection, ClienteSchema)
-
-            //instancia o contexto do banco de dados e schema a ser testado
-            context = new Context(new Postgres(connection, model))
-        })
-
-        it('PostgresSQL Connection',  async function () {
-            const result = await context.isConnected()
-
-            assert.deepStrictEqual(result, true)
-        })
-
-        it('cadastrar', async function (){
-            const result = await context.create(MOCK_CLIENTE_CADASTRAR)
-            
-            /* Como o resultado retorna o id junto, e para nosso teste 
-            é irrelevante, nós deletamos essa chave*/
-            delete result.id
-            console.log('result',result)
-            assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
-        })
-    })
-```
-
-rodando o teste:
-    
-`npm test`
-
-
 **Método Read**
 
 O método findAll do sequelize retorna um array com uma lista de resultados e todos atributos e informações, desejamos apenas que retorne os dados referente a nosso objeto consultado, pra isso passamos o atributo 'raw:true'
@@ -332,19 +258,6 @@ O método findAll do sequelize retorna um array com uma lista de resultados e to
     async read(item = {}){
         return this._schema.findAll({where : item, raw:true})
     }
-```
-
-- Seguindo nosso fluxo TDD, ja implementamos o teste para nosso método criado
-
-Como ja mencionado, o método findAll nos retorna um array, desejamos apenas a primeira posição desse array utilizando [result], e também desprezamos a chave id para nosso teste
-
-```javascript
-    it('listar', async function (){
-        const [result] = await context.read({nome: MOCK_CLIENTE_CADASTRAR.nome})
-
-        delete result.id
-        assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
-    })
 ```
 
 **Método Update**
@@ -357,41 +270,9 @@ O método update, deve receber o id do objeto a ser atualizado, e o valor a ser 
     }
 ```
 
-Para que nosso teste do update funcione, vamos inserir o objeto MOCK_CLIENTE_ATUALIZAR que devemos defini-lo antes dos testes:
-
-```javascript
-    const MOCK_CLIENTE_ATUALIZAR = {
-        nome: "Pedro",
-        profissao: "Professor"
-    }
-```
-
-
-```javascript
-    this.beforeAll(async function(){
-        await context.connect()
-        await context.create(MOCK_CLIENTE_ATUALIZAR)
-    })
-
-```
 O retorno da função update é um array com um ou dois elementos. O primeiro elemento é sempre o número de linhas afetadas, enquanto o segundo elemento são as linhas afetadas reais (suportado apenas em postgres com options.returning: true)
 
 fonte: `https://sequelize.org/master/class/lib/model.js~Model.html#static-method-update`
-
-```javascript
-    it('atualizar', async function (){
-        const [itemAtualizar] = await context.read({ nome: MOCK_CLIENTE_ATUALIZAR.nome})
-
-        
-        const novoItem = {
-            ...MOCK_CLIENTE_ATUALIZAR, 
-            nome:'Luiz'
-        }
-        const [result] = await context.update(itemAtualizar.id, novoItem)
-
-        assert.deepStrictEqual(result, 1)
-    })
-```
 
 **Método delete**
 
@@ -403,17 +284,6 @@ fonte: `https://sequelize.org/master/class/lib/model.js~Model.html#static-method
 ```
 
 Assim como o método update, o delete retorna o numero de linhas afetadas, com base nisso criamos nosso teste.
-
-
-```javascript
-    it('remover por id', async function (){
-        const [item] = await context.read({})
-
-        const result = await context.delete(item.id)
-
-        assert.deepStrictEqual(result, 1)
-    })
-```
 
 ## Estratégia com MongoDB ##
 
@@ -505,33 +375,6 @@ Criamos o método isConnected para verificar o status da conexão, antes da defi
 
 Dessa forma, se o status for conectando, lançamos uma promise e aguardamos 1 segundo para que o status seja retornado novamente. Vamos validar isso em nossos testes.
 
-```javascript
-const assert = require('assert')
-const MongoDB = require('./../db/strategies/mongodb/mongodb')
-const Context = require('./../db/strategies/base/contextStrategy')
-const ClienteSchema = require('./../db/strategies/mongodb/schemas/clientesSchema')
-
-let context = {}
-
-describe('MongoDB suite de testes', function (){
-
-    this.beforeAll(async () => {
-        const connection = MongoDB.connect()
-
-        context = new Context(new MongoDB(connection, ClienteSchema))
-    })
-    it('Verificar conexão', async function (){
-        const result = await context.isConnected()
-
-        console.log('result', result)
-
-        const expected = 'Connected'
-
-        assert.deepStrictEqual(result, expected)
-    })
-})
-
-```
 
 **Método Create**
 
@@ -543,25 +386,6 @@ describe('MongoDB suite de testes', function (){
 
 ```
 
-Criamos o objeto MOCK_CLIENTE_CADASTRAR para testar nosso método create.
-
-```javascript
-    const MOCK_CLIENTE_CADASTRAR = {
-        nome:'Jose',
-        profissao: 'Mecânico'
-    }
-```
-Para validar nosso teste, extraimos do objeto retornado apenas os valores 'nome' e 'profissão', e comparamos com o objeto MOCK_CLIENTE_CADASTRAR
-
-```javascript
-
-    it('cadastrar', async function (){
-        const { nome, profissao } = await context.create(MOCK_CLIENTE_CADASTRAR)
-
-        assert.deepStrictEqual({nome, profissao}, MOCK_CLIENTE_CADASTRAR)
-    })
-```
-
 **Metodo read**
 
 Criamos o metodo read, que recebe como parametros da query, o item a ser pesquisado, skip e limit, de modo a se aplicar a boa prática de paginação dos resultados, sendo assim, ao chamar o método pode-se definir a partir de qual posição (skip) se deseja iniciar, e a quantidade de resultados a se retornar (limit)
@@ -570,19 +394,6 @@ Criamos o metodo read, que recebe como parametros da query, o item a ser pesquis
     read(item, skip=0, limit=10){
         return this._schema.find(item).skip(skip).limit(limit)
     }
-```
-```javascript
-     it('listar', async function (){
-        /* Pega somente os atributos nome e poder do objeto retornado na primeira posição da lista */
-        
-        const [{nome, profissao}] = await context.read({nome: MOCK_CLIENTE_CADASTRAR.nome})
-
-        const result = {
-            nome, profissao
-        }
-
-        assert.deepStrictEqual(result, MOCK_CLIENTE_CADASTRAR)
-    })
 ```
 
 **Método Update**
@@ -594,38 +405,6 @@ No mongoDB caso não seja especificado o que se deseja realizar, pode-se ocorrer
     }
 ```
 
-Para testar nosso método, definimos dois objetos que serão manipulados no teste, os quais precisam ser chamados no beforeAll da suite de testes
-
-```javascript
-    const MOCK_CLIENTE_ATUALIZAR = {
-    nome:'Alfredo',
-    profissao: 'Motorista'
-    }
-    let MOCK_CLIENTE_ID = ''
-```    
-
-```javascript
-    this.beforeAll(async () => {
-        const connection = MongoDB.connect()
-
-        context = new Context(new MongoDB(connection, ClienteSchema))
-
-        //cria-se o objeto para se poder utilizar no teste do metodo
-        const result = await context.create(MOCK_CLIENTE_ATUALIZAR)
-        
-        //armazena o id do objeto criado
-        MOCK_CLIENTE_ID = result._id 
-    })
-```
-Realiza o teste passando o id do nosso objeto criado, e especificando a chave e valor a serem atualizados. Por padrão é retornado o numero de linhas afetadas, sendo assim esperamos que seja apenas 1.
-```javascript
-    it('atualizar', async function (){
-        const result = await context.update(MOCK_CLIENTE_ID, {nome: 'Vicente'})
-
-        assert.deepStrictEqual(result.nModified, 1)
-    })
-```
-
 **Metodo delete**
 
 Por padrão o mongo nao permite que se passe o remove sem where, irá retornar uma exceçao informando
@@ -634,12 +413,4 @@ Caso realmente se deseje remover todos os dados da base, deve se explicitar pass
     delete(id){
         return this._schema.deleteOne({_id: id})
     }
-```
-Por padrão é retornado o numero de linhas afetadas, sendo assim esperamos que seja apenas 1.
-```javascript
-    it('remover', async function (){
-        const result = await context.delete(MOCK_CLIENTE_ID)
-
-        assert.deepStrictEqual(result.n, 1)
-    })
 ```
